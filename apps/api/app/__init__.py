@@ -1,0 +1,1 @@
+"""Exoplanet transit-detection service."""
