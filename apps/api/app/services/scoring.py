@@ -7,7 +7,7 @@ from app.services.pipeline import TransitCandidate, heuristic_probability
 
 
 class CandidateScorer:
-    """Optional TorchScript classifier with a transparent baseline fallback."""
+    """Optional morphology-and-diagnostics model with a transparent fallback."""
 
     def __init__(self, model_path: str | None = None) -> None:
         self.mode: Literal["learned", "baseline"] = "baseline"
@@ -28,10 +28,9 @@ class CandidateScorer:
         self.mode = "learned"
         self.name = "transit-fusion-1d"
 
-    def score(self, candidate: TransitCandidate) -> float:
-        if self._model is None:
-            return heuristic_probability(candidate)
-        features = np.array(
+    @staticmethod
+    def features(candidate: TransitCandidate) -> np.ndarray:
+        return np.array(
             [
                 np.log1p(candidate.period_days) / 4,
                 candidate.duration_days / candidate.period_days,
@@ -44,7 +43,27 @@ class CandidateScorer:
             ],
             dtype=np.float32,
         )
+
+    @staticmethod
+    def phase_window(candidate: TransitCandidate, length: int = 256) -> np.ndarray:
+        order = np.argsort(candidate.phase)
+        phase = candidate.phase[order]
+        flux = candidate.phase_flux[order]
+        grid = np.linspace(-0.5, 0.5, length, dtype=np.float32)
+        interpolated = np.interp(grid, phase, flux)
+        median = float(np.median(interpolated))
+        scale = max(float(np.median(np.abs(interpolated - median))) * 1.4826, 1e-5)
+        return ((interpolated - median) / scale).astype(np.float32)
+
+    def score(self, candidate: TransitCandidate) -> float:
+        if self._model is None:
+            return heuristic_probability(candidate)
+        features = self.features(candidate)
+        window = self.phase_window(candidate)
         with self._torch.inference_mode():
-            output = self._model(self._torch.from_numpy(features).unsqueeze(0))
+            output = self._model(
+                self._torch.from_numpy(window).reshape(1, 1, -1),
+                self._torch.from_numpy(features).reshape(1, -1),
+            )
             probability = self._torch.sigmoid(output.reshape(-1)[0]).item()
         return float(np.clip(probability, 0.0, 1.0))
