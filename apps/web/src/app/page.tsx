@@ -281,23 +281,29 @@ function Evidence({label, value}: {label:string; value:number}) {
   return <div className="evidence"><div><span>{label}</span><strong>{value}%</strong></div><i><b style={{width:`${value}%`}} /></i></div>;
 }
 
-function points(x: number[], y: number[], width:number, height:number, padding=14) {
+function coordinates(x:number[], y:number[], width:number, height:number, padding=14) {
   const minX=Math.min(...x), maxX=Math.max(...x), minY=Math.min(...y), maxY=Math.max(...y);
   return x.map((value,index) => {
     const px=padding+(value-minX)/(maxX-minX || 1)*(width-padding*2);
     const py=padding+(maxY-y[index])/(maxY-minY || 1)*(height-padding*2);
-    return `${px.toFixed(1)},${py.toFixed(1)}`;
-  }).join(" ");
+    return [px,py] as const;
+  });
+}
+
+function points(x:number[], y:number[], width:number, height:number, padding=14) {
+  return coordinates(x,y,width,height,padding)
+    .map(([px,py]) => `${px.toFixed(1)},${py.toFixed(1)}`)
+    .join(" ");
 }
 
 function LightCurveChart({time, flux, trend}: {time:number[]; flux:number[]; trend?:number[]}) {
+  const chartPoints=coordinates(time,flux,900,260);
   return <svg className="light-chart" viewBox="0 0 900 260" preserveAspectRatio="none" aria-label="Light curve chart">
     <Grid width={900} height={260} />
     {trend && <polyline className="trend-line" points={points(time,trend,900,260)} />}
     <polyline className="flux-line" points={points(time,flux,900,260)} />
     {time.filter((_,i)=>i%3===0).map((value,i) => {
-      const sourceIndex=i*3; const coordinate=points([time[0],value],[Math.min(...flux),flux[sourceIndex]],900,260).split(" ")[1];
-      const [cx,cy]=coordinate.split(",");
+      const sourceIndex=i*3; const [cx,cy]=chartPoints[sourceIndex];
       return <circle key={value} cx={cx} cy={cy} r="1.7" className="flux-point" />;
     })}
   </svg>;
@@ -314,12 +320,13 @@ function Periodogram({periods, power, peak}: {periods:number[]; power:number[]; 
 }
 
 function PhaseChart({phase, flux}: {phase:number[]; flux:number[]}) {
+  const chartPoints=coordinates(phase,flux,440,190);
   return <svg className="small-chart" viewBox="0 0 440 190" preserveAspectRatio="none" aria-label="Phase folded transit">
     <Grid width={440} height={190} />
     <polyline className="phase-line" points={points(phase,flux,440,190)} />
     {phase.filter((_,i)=>i%4===0).map((value,i) => {
-      const index=i*4; const xy=points([phase[0],value],[Math.min(...flux),flux[index]],440,190).split(" ")[1].split(",");
-      return <circle key={value} cx={xy[0]} cy={xy[1]} r="2" className="phase-point" />;
+      const index=i*4; const [cx,cy]=chartPoints[index];
+      return <circle key={value} cx={cx} cy={cy} r="2" className="phase-point" />;
     })}
   </svg>;
 }

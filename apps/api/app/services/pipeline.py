@@ -121,10 +121,11 @@ def _read_fits(payload: bytes, filename: str) -> LightCurve:
             if quality_name
             else np.zeros(flux.size, dtype=np.int64)
         )
+        time_values = np.asarray(table_hdu.data[names["TIME"]], dtype=np.float64)
         target = str(primary.get("OBJECT") or primary.get("TICID") or Path(filename).stem)
         mission = str(primary.get("MISSION") or header.get("TELESCOP") or "Uploaded FITS")
     return LightCurve(
-        time=np.asarray(table_hdu.data[names["TIME"]], dtype=np.float64),
+        time=time_values,
         flux=flux,
         flux_error=error,
         quality=quality,
